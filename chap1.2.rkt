@@ -1,4 +1,4 @@
-;#lang planet neil/sicp
+#lang planet neil/sicp
 
 ;; Exercise 1.6
 
@@ -361,3 +361,7 @@
          ((mr-test n) (mr-prime? n (- times 1)))
          (else #f)))
     
+(define (mr-demo)
+  (define (check? n) (mr-prime? n 20))
+  (display (map check? carmichael-numbers)) ;all false
+  (display (map check? (search-for-primes 1000000 10)))) ;all true

@@ -233,7 +233,7 @@
 
 (define (fixed-point f x)
   ((iterative-improve
-    (lambda (x) (< (abs (- x (f x))) tolerance))
+    (lambda (x) (< (abs (- x (f x))) tolerance)) ;;hmm, duplicates work
     f) 
    x))
 
