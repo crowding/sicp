@@ -40,7 +40,7 @@
     (let ((ix (index-of-eq exp op)))
       (list-head exp ix))))
 
-(define (right op) 
+(define (right op)
   (lambda (exp) (list-tail exp (inc (index-of-eq exp op)))))
 
 (define addend (left '+))
@@ -142,3 +142,4 @@
         ((singleton? exp) (deriv (car exp) var))
         (else
          (error "unknown expression type: DERIV" exp))))
+ 
