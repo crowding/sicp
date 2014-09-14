@@ -43,7 +43,7 @@
 
 ;; call (infinite-coercer) and it loops.
 
-;; B. `apply-generic` works OK, but only for the collection of
+;; B. `apply-generic` works OK as is, but only for the collection of
 ;; routines we have considered (which all operate on two values of the
 ;; same type.) However, something else may need to happen if you have
 ;; operations that take different types in each argument. (for
@@ -52,8 +52,7 @@
 ;; into a line, but given `(complex, plane)` you won't get to
 ;; (line,plane) bo coercing similar types.
 
-;; C.
-;; the repetition of "error" is a bit grating here.
+;; C. The repetition of "error" is a bit grating here.
 (define (apply-generic-louis op . args)
   (let ((type-tags (map type-tag args)))
     (let ((proc (get op type-tags)))
@@ -87,7 +86,8 @@
        (exp 3 3); does not bother to coerce
        (exp (make-complex-from-real-imag 3 4) ;makes infinite loop
             (make-complex-from-real-imag 0.5 1))
-       (set! coercion-tables old-tables)))
+       (set! coercion-tables old-tables)
+       (set! apply-generic apply-generic-old)))
 
 ;;; Exercise 2.82
 
@@ -134,6 +134,46 @@
                      (map (lambda (arg) (coerce arg coerce-to)) args)))
                 (apply apply-generic (cons op coerced-args)))
               (error "No method for these types: " (list op type-tags)))))))
+
+;;; Exercise 2.83
+
+;; I guess we will need an integer and a "real" (i.e. float) package.
+(define (make-integer x) ((get 'make '(integer)) x))
+(define (install-integer-package)
+  (put 'make '(integer)
+       (lambda (x) (if (integer? x)
+                  (attach-tag 'integer (floor x)) ; i.e. use a Scheme integer
+                  (error "Not an integer:" x))))
+  (put 'add '(integer integer) +)
+  (put 'sub '(integer integer) -)
+  (put 'mul '(integer integer) *))
+
+;; It bothers me that "real" is considered higher in the hierarchy
+;; than "rational" since every _possible_ "real" is also a rational
+;; (barring NaNs and negative zeros.) But this is what A&S ask for,
+;; passing the actual worrying-about-floats off to a numerical analysi
+;; or some other kind of magician.
+(define (make-real x) ((get 'make '(real)) x))
+(define (install-real-package)
+  (put 'make '(real)
+       (lambda (x) (if (real? x)
+                  (attach-tag 'real (exact->inexact x))
+                  (error "Not a real number:" x))))
+  (put 'add '(real real) +)
+  (put 'sub '(real real) -)
+  (put 'mul '(real real) *)
+  (put 'div '(real real) /))
+
+;;_Anyway, here is a "raise" operation.
+(define (raise x) (apply-generic 'raise x))
+(define (install-raisers-package)
+  (define (integer->rational x) (make-rational x 1))
+  (put 'raise '(integer) integer->rational)
+  (define (rational->real x) (make-real (/ (car x) (cdr x))))
+  (put 'raise '(rational) rational->real)
+  (define (real->complex x) (make-complex-from-real-imag x 0.0))
+  (put 'raise '(real) real->complex)
+  'done)
 
                                         ;; newly written to backfill book
 (define (show . args)
@@ -222,7 +262,7 @@
 (define (make-scheme-number x) x)
 
 (define (attach-tag type-tag contents)
-  (cond ((number? contents) contents)
+  (cond ((equal? type-tag 'scheme-number) contents)
         (else (cons type-tag contents))))
 
 (define (type-tag datum)
@@ -422,6 +462,9 @@
 (install-equality-package)
 (install-zero-package)
 (install-coercions-package)
+(install-integer-package)
+(install-real-package)
+(install-raisers-package)
 (set! apply-generic apply-generic-casting)
                                         ; MORE PREVIOUSLY FROM BOOK
 (define (square x) (* x x))
