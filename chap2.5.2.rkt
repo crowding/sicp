@@ -149,7 +149,8 @@
   (put 'sub '(integer integer)
        (lambda (x y) (make-integer (- x y))))
   (put 'mul '(integer integer)
-       (lambda (x y) (make-integer (* x y)))))
+       (lambda (x y) (make-integer (* x y))))
+  (put 'equ? '(integer integer) equal?))
 
 ;; It bothers me that "real" is considered higher in the hierarchy
 ;; than "rational" since every _possible_ "real" is also a rational
@@ -167,10 +168,12 @@
   (put 'sub '(real real)
        (lambda (x y) (make-real (- x y))))
   (put 'mul '(real real)
-       (lambda (x y) (make-real (* x y)))))
+       (lambda (x y) (make-real (* x y))))
+  (put 'equ? '(real real) equal?))
 
 ;;Anyway, here is a "raise" operation.
-(define (raise x) (apply-generic 'raise x))
+;; do not not just use whichever apply-generic is in play; see Ex. 2.85
+(define (raise x) (apply-generic-raising 'raise x))
 (define (install-raisers-package)
   (define (integer->rational x) (make-rational x 1))
   (put 'raise '(integer) integer->rational)
@@ -229,16 +232,60 @@
 ;; will fail to notice that `div `(rational rational)` exists
 (define (apply-generic-raising op . args)
   (let* ((types (map type-tag args))
-        (proc (get op types)))
+         (proc (get op types)))
     (if proc
         (apply proc (map contents args))
         (let* ((raised (raise-list args))
-               (proc (get op (map type-tag raised))))
+               (raised-types (map type-tag raised))
+               (proc (get op raised-types)))
           (if proc
               (apply proc (map contents raised))
               (error "No method and no casting" (list op types)))))))
 
 ;;; Exercise 2.85
+
+;; An unexpected difficulty I found was that `apply-generic-dropping`
+;; drops something, then tests if it is equ? to the original thing,
+;; which calls generic `equ`, which causes a `raise` operation, which
+;; is generic -- so (apply-generic-dropping 'raise thing( immediately
+;; attempts to drop the raised thing again, so raise--to raises again,
+;; then apply-generic drops it, back and forth in a cycle.
+;;
+;; Thus I adjusted `raise` above to use a specific non-dropping
+;; version of apply-generic. Similarly, dropping the result of
+;; 'project' seems redundant.
+
+;; (add (make-complex-from-real-imag 3.25 0)
+;;      (make-complex-from-mag-ang 2.75 0))
+
+(define (project x) (apply-generic-raising 'project x))
+
+(define (install-project-package)
+  (put 'project '(rational)
+       (lambda (x) (make-integer (quotient (car x) (cdr x)))))
+  (put 'project '(real)
+       (lambda (x) (make-integer (inexact->exact (floor x)))))
+  (put 'project '(complex)
+       (lambda (x) (make-real (real-part x)))))
+
+(define (drop x)
+  ;;only bother dropping something if the type is
+  ;;higher than the bottom type and has a `project` method.
+  (let* ((type (type-tag x))
+         (proj (get 'project (list type))))
+    (if proj
+        (begin
+          (if (equal? 'first (compare-tower type (car tower)))
+              (let ((lowered (project x)))
+                (if (equ? lowered x)
+                    (drop lowered)
+                    x))))
+        x)))
+
+(define (apply-generic-dropping op . args)
+  (let ((result (apply apply-generic-raising (cons op args))))
+    (let ((dropped (drop result)))
+      dropped)))
 
                                         ;; newly written to backfill book
 (define (show . args)
@@ -275,6 +322,15 @@
   'done)
 
                                         ;; PREVIOUSLY WRITTEN + changes
+
+(define (add x y) (apply-generic 'add x y))
+(define (sub x y) (apply-generic 'sub x y))
+(define (mul x y) (apply-generic 'mul x y))
+(define (div x y) (apply-generic 'div x y))
+(define (equ? x y) (apply-generic 'equ? x y))
+(define (=zero? x) (apply-generic '=zero? x))
+
+
 (define (apply-generic-casting op . args)
   (let ((type-tags (map type-tag args)))
     (let ((proc (get op type-tags)))
@@ -306,7 +362,6 @@
         (else (cons (car table) (update (cdr table) key value)))))
 
 (define (lookup table key)
-  ;(show "table" table "key" key)
   (cond ((null? table) nil)
         ((equal? (caar table) key)
          (cdar table))
@@ -333,7 +388,10 @@
 (define (type-tag datum)
   (cond ((number? datum) 'scheme-number)
         ((pair? datum) (car datum))
-        (else (error "Bad tagged datum: TYPE-TAG" datum))))
+        (else 'nonpair))) ;error message removed, since `equ?`returns
+                          ;primitive booleans and
+                          ;apply-generic-dropping tries to generically
+                          ;drop results.
 
 (define (contents datum)
   (cond ((number? datum) datum)
@@ -350,15 +408,13 @@
        (lambda (x y) (* x y)))
   (put 'div '(scheme-number scheme-number)
        (lambda (x y) (/ x y)))
+  (put 'equ? '(scheme-number scheme-number)
+       (lambda (x y) (= x y)))
+  (put '=zero? '(scheme-number) (lambda (x) (= x 0)))
   (define (->complex n)
     (make-complex-from-real-imag (contents n) 0))
   (put-coercion 'scheme-number 'complex ->complex)
   'done)
-
-(define (add x y) (apply-generic 'add x y))
-(define (sub x y) (apply-generic 'sub x y))
-(define (mul x y) (apply-generic 'mul x y))
-(define (div x y) (apply-generic 'div x y))
 
 (define (install-rational-package)
   ;; internal procedures
@@ -387,6 +443,12 @@
   (put 'sub '(rational rational) (lambda (x y) (tag (sub-rat x y))))
   (put 'mul '(rational rational) (lambda (x y) (tag (mul-rat x y))))
   (put 'div '(rational rational) (lambda (x y) (tag (div-rat x y))))
+  (put 'equ? '(rational rational)
+       (lambda (x y)
+         (and (= (numer x) (numer y))
+              (= (denom x) (denom y)))))
+  (put '=zero? '(rational)
+       (lambda (x) (= (numerator x 0))))
   (put 'make 'rational (lambda (n d) (tag (make-rat n d))))
   'done)
 
@@ -422,6 +484,11 @@
        (lambda (z1 z2) (tag (mul-complex z1 z2))))
   (put 'div '(complex complex)
        (lambda (z1 z2) (tag (div-complex z1 z2))))
+  (put 'equ? '(complex complex)
+       (lambda (x y)
+         (and (= (real-part x) (real-part y))
+              (= (imag-part x) (imag-part y)))))
+  (put '=zero? '(complex) =zero?)
   (put 'make-from-real-imag '(complex)
        (lambda (x y) (tag (make-from-real-imag x y))))
   (put 'make-from-mag-ang '(complex)
@@ -465,6 +532,9 @@
        (lambda (x y) (tag (make-from-real-imag x y))))
   (put 'make-from-mag-ang '(rectangular)
        (lambda (r a) (tag (make-from-mag-ang r a))))
+  (put '=zero? '(rectangular)
+       (lambda (x) (and (= (real-part x) 0)
+                        (= (imag-part x) 0))))
   'done)
 
 (define (install-polar-package)
@@ -479,6 +549,10 @@
   (define (make-from-real-imag x y)
     (cons (sqrt (+ (square x) (square y)))
           (atan y x)))
+  (put '=zero? '(polar)
+       (lambda (x) (= (magnitude
+                       (attach-tag 'polar x)) ;ugh
+                      0)))
   ;; interface to the rest of the system
   (define (tag x) (attach-tag 'polar x))
   (put 'real-part '(polar) real-part)
@@ -491,46 +565,17 @@
        (lambda (r a) (tag (make-from-mag-ang r a))))
   'done)
 
-(define (equ? x y) (apply-generic 'equ? x y))
-(define (install-equality-package)
-  (put 'equ? '(scheme-number scheme-number)
-       (lambda (x y) (equal? x y)))
-  (put 'equ? '(complex complex)
-       (lambda (x y)
-         (and (equal? (real-part x) (real-part y))
-              (equal? (imag-part x) (imag-part y)))))
-  (put 'equ? '(rational rational)
-       (lambda (x y)
-         (and (equal? (numerator x) (numerator y))
-              (equal? (denominator x) (denominator y))))))
-
-(define (=zero? x)
-  (apply-generic '=zero? x))
-(define (install-zero-package)
-  (put '=zero? '(scheme-number) (lambda (x) (= x 0)))
-  (put '=zero? '(complex) =zero?)
-  (put '=zero? '(polar)
-       (lambda (x) (= (magnitude
-                       (attach-tag 'polar x)) ;ugh
-                      0)))
-  (put '=zero? '(rectangular)
-       (lambda (x) (and (= (real-part x) 0)
-                        (= (imag-part x) 0))))
-  (put '=zero? '(rational)
-       (lambda (x) (= (numerator x 0)))))
-
 (install-rectangular-package)
 (install-polar-package)
 (install-complex-package)
 (install-rational-package)
 (install-scheme-number-package)
-(install-equality-package)
-(install-zero-package)
 (install-coercions-package)
 (install-integer-package)
 (install-real-package)
 (install-raisers-package)
-(set! apply-generic apply-generic-casting)
+(install-project-package)
+(set! apply-generic apply-generic-dropping)
                                         ; MORE PREVIOUSLY FROM BOOK
 (define (square x) (* x x))
 
