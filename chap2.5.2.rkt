@@ -144,14 +144,17 @@
        (lambda (x) (if (integer? x)
                   (attach-tag 'integer (floor x)) ; i.e. use a Scheme integer
                   (error "Not an integer:" x))))
-  (put 'add '(integer integer) +)
-  (put 'sub '(integer integer) -)
-  (put 'mul '(integer integer) *))
+  (put 'add '(integer integer)
+       (lambda (x y) (make-integer (+ x y))))
+  (put 'sub '(integer integer)
+       (lambda (x y) (make-integer (- x y))))
+  (put 'mul '(integer integer)
+       (lambda (x y) (make-integer (* x y)))))
 
 ;; It bothers me that "real" is considered higher in the hierarchy
 ;; than "rational" since every _possible_ "real" is also a rational
 ;; (barring NaNs and negative zeros.) But this is what A&S ask for,
-;; passing the actual worrying-about-floats off to a numerical analysi
+;; passing the actual worrying-about-floats off to a numerical analyst
 ;; or some other kind of magician.
 (define (make-real x) ((get 'make '(real)) x))
 (define (install-real-package)
@@ -159,21 +162,83 @@
        (lambda (x) (if (real? x)
                   (attach-tag 'real (exact->inexact x))
                   (error "Not a real number:" x))))
-  (put 'add '(real real) +)
-  (put 'sub '(real real) -)
-  (put 'mul '(real real) *)
-  (put 'div '(real real) /))
+  (put 'add '(real real)
+       (lambda (x y) (make-real (+ x y))))
+  (put 'sub '(real real)
+       (lambda (x y) (make-real (- x y))))
+  (put 'mul '(real real)
+       (lambda (x y) (make-real (* x y)))))
 
-;;_Anyway, here is a "raise" operation.
+;;Anyway, here is a "raise" operation.
 (define (raise x) (apply-generic 'raise x))
 (define (install-raisers-package)
   (define (integer->rational x) (make-rational x 1))
   (put 'raise '(integer) integer->rational)
+  (put-coercion 'integer 'rational integer->rational)
   (define (rational->real x) (make-real (/ (car x) (cdr x))))
   (put 'raise '(rational) rational->real)
+  (put-coercion 'rational 'real rational->real)
   (define (real->complex x) (make-complex-from-real-imag x 0.0))
   (put 'raise '(real) real->complex)
+  (put-coercion 'real 'complex 'real->complex)
   'done)
+
+;;; Exercise 2.84
+
+;; I chose to hold the numeric towser as a list in a variable. To add
+;; types to the tower, implement their raise operations and add them
+;; name to this list.
+
+(define tower '(integer rational real complex))
+
+(define (compare-tower x y)
+  ;return 1 if type y is higher, -1 if type x is higher, 0 if equal
+  (define (step-up-tower ranks)
+    (if (null? ranks)
+        (error "Types not on tower" (list x y))
+        (let ((rank (car ranks)))
+          (if (equal? x rank)
+              (if (equal? y rank)
+                  'same
+                  'second)
+              (if (equal? y rank)
+                  'first
+                  (step-up-tower (cdr ranks)))))))
+  (step-up-tower tower))
+
+(define (highest-type list)
+  (define (pick-highest x y)
+    (case (compare-tower x y)
+      ((first) x)
+      ((second) y)
+      ((same) x)))
+  (fold-left pick-highest (car tower) list))
+
+(define (raise-to target arg)
+  ;; repeatedly raise the argument until it is at the required type.
+  (if (equal? (type-tag arg) target) arg
+      (raise-to target (raise arg))))
+
+(define (raise-list args)
+  (let ((target (highest-type (map type-tag args))))
+    (map (lambda (x) (raise-to target x)) args)))
+
+;; Then the apply-generic becomes this. Note that this will not
+;; recognize cases where types must be raised in order to access the
+;; given operation. For example `(div (make-integer 3) (make-integer 4)`
+;; will fail to notice that `div `(rational rational)` exists
+(define (apply-generic-raising op . args)
+  (let* ((types (map type-tag args))
+        (proc (get op types)))
+    (if proc
+        (apply proc (map contents args))
+        (let* ((raised (raise-list args))
+               (proc (get op (map type-tag raised))))
+          (if proc
+              (apply proc (map contents raised))
+              (error "No method and no casting" (list op types)))))))
+
+;;; Exercise 2.85
 
                                         ;; newly written to backfill book
 (define (show . args)
@@ -468,3 +533,11 @@
 (set! apply-generic apply-generic-casting)
                                         ; MORE PREVIOUSLY FROM BOOK
 (define (square x) (* x x))
+
+(define (fold-left op initial sequence)
+  (define (iter result rest)
+    (if (null? rest)
+        result
+        (iter (op result (car rest))
+              (cdr rest))))
+  (iter initial sequence))
