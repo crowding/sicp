@@ -189,8 +189,8 @@
 
                                         ;                     NUMERIC TOWER TYPES
 
-;;allows resting as much as possible on scheme numerics, which may be
-;;sort of cheating the intent ofCZ.
+;;this function allows resting as much as possible on scheme numerics, which may be
+;;sort of cheating the intent of the problem.
 (define (make-number x)
   (cond
    ((integer? x) (make-integer x))
