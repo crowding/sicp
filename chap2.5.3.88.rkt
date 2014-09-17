@@ -1,22 +1,28 @@
 #lang planet neil/sicp
 
-;;; Because this chapter asks to cumulatively develop features, my
-;;; "answers" will be arranged in a series of files. The code
-;;; attributable to each "exercise" will be described in the header and
-;;; should be visible by diffing, or in VC history.
-
-;;; This file does not contain any exercise solutions, other than
-;;; putting hte pieces together from the book so that the
-;;; preliminaries work.
+;;; Exercise 2.87.
+;;;
+;;; =zero? is added to the poiynomial package below. A test of adding
+;;; polynomials with compatible polynomial coefficients is added to
+;;; (demo).
 
 (define (demo)
   (install-polynomial-package)
   (let ((p1 (make-polynomial 'x '((0 1) (5 1) (10 2))))
         (p2 (make-polynomial 'x '((0 13) (5 2) (2 10))))
         (pa (make-polynomial 'x '((2 2) (5 8))))
-        (pb (make-polynomial 'x '((3 1) (7 4)))))
+        (pb (make-polynomial 'x '((3 1) (7 4))))
+        ;; (3y^2)(x^0) + (2y)x + (1y^0)x^2
+        (ppa (make-polynomial 'x (list (list 0 (make-polynomial 'y '((2 3))))
+                                       (list 1 (make-polynomial 'y '((1 2))))
+                                       (list 2 (make-polynomial 'y '((0 1)))))))
+        ;; (1y^0)(x^0) + (2y)x + (3y^2)x^2
+        (ppb (make-polynomial 'x (list (list 0 (make-polynomial 'y '((0 1))))
+                                       (list 1 (make-polynomial 'y '((1 2))))
+                                       (list 2 (make-polynomial 'y '((2 3))))))))
     ((trace 'add add) p1 p2)
-    ((trace 'mul mul) pa pb)))
+    ((trace 'mul mul) pa pb)
+    ((trace 'add add) ppa ppb)))
 
                                         ;                    GENERIC FUNCTIONS
 
@@ -26,7 +32,6 @@
 (define (div x y) (apply-generic 'div x y))
 (define (=zero? x) (apply-generic '=zero? x))
 (define (raise x) (apply-generic 'raise x))
-
 
 
                                         ;                    POLYNOMIAL PACKAGE
@@ -110,13 +115,18 @@
            (make-term (+ (order t1) (order t2))
                       (mul (coeff t1) (coeff t2)))
            (mul-term-by-all-terms t1 (rest-terms L))))))
+
+  (define (poly-=zero? p)
+    (all =zero? (map coeff (term-list p))))
   
   ;; interface to rest of the system
   (define (tag p) (attach-tag 'polynomial p))
   (put 'add '(polynomial polynomial)
         (lambda (p1 p2) (tag (add-poly p1 p2))))
   (put 'mul '(polynomial polynomial)
-        (lambda (p1 p2) (tag (mul-poly p1 p2))))
+       (lambda (p1 p2) (tag (mul-poly p1 p2))))
+  (put '=zero? '(polynomial)
+       (lambda (term-list) (poly-=zero? term-list)))
   (put 'make 'polynomial
         (lambda (var terms)
           (tag (make-poly var terms))))
@@ -274,8 +284,16 @@
   (iter initial sequence))
 
 
+(define (all pred list)
+  ;; apply predicate to each item; return #t if all results are non-#f.
+  (if (null? list)
+      #t
+      (and (pred (car list)) (all pred (cdr list)))))
+
 
                                         ;                    INSTALLING / TRACING
+
+;; (set! apply-generic (trace 'apply-generic apply-generic))
 
 (install-polynomial-package)
 (install-scheme-number-package)
