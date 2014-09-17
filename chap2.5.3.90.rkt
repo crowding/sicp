@@ -2,28 +2,43 @@
 
 ;;; Exercise 2.90
 
+;; Aside from defining a generic 'polynomial' type that delegated to
+;; the enclosed type, the colution to this involved defining 'add' and
+;; 'mul' procedures that worked between dense and sparse polynomials.
+;; This in turn relied on converting dense to sparse polynomials
+;; (which is the easier of the two conversions, though space
+;; efficiency might motivate being able to do it either way depending
+;; on how large the result would end up.)
+
+;; The "raise" and numeric tower infrastructure is largely unused.
+
 (define (demo)
-  (install-polynomial-package)
-  (let ((p1 (make-polynomial 'x '((0 1) (5 1) (10 2))))
-        (p2 (make-polynomial 'x '((0 13) (5 2) (2 10))))
-        (pa (make-polynomial 'x '((2 2) (5 8))))
-        (pb (make-polynomial 'x '((3 1) (7 4))))
+  (let ((p1 (make-polynomial-sparse 'x '((0 1) (5 1) (10 2))))
+        (p2 (make-polynomial-sparse 'x '((0 13) (5 2) (2 10))))
+        (pa (make-polynomial-sparse 'x '((2 2) (5 8))))
+        (pb (make-polynomial-sparse 'x '((3 1) (7 4))))
         ;; (3y^2)(x^0) + (2y)x + (1y^0)x^2
-        (ppa (make-polynomial 'x (list (list 0 (make-polynomial 'y '((2 3))))
-                                       (list 1 (make-polynomial 'y '((1 2))))
-                                       (list 2 (make-polynomial 'y '((0 1)))))))
+        (ppa (make-sparse-polynomial
+              'x (list (list 0 (make-polynomial-sparse 'y '((2 3))))
+                       (list 1 (make-polynomial-sparse 'y '((1 2))))
+                       (list 2 (make-polynomial-sparse 'y '((0 1)))))))
         ;; (1y^0)(x^0) + (2y)x + (3y^2)x^2
-        (ppb (make-polynomial 'x (list (list 0 (make-polynomial 'y '((0 1))))
-                                       (list 1 (make-polynomial 'y '((1 2))))
-                                       (list 2 (make-polynomial 'y '((2 3)))))))
-        (dp1 (make-dense-polynomial 'x '(4 3 2 1)))
-        (dp2 (make-dense-polynomial 'x '(10 20 30))))
+        (ppb (make-sparse-polynomial
+              'x (list (list 0 (make-polynomial-sparse 'y '((0 1))))
+                       (list 1 (make-polynomial-sparse 'y '((1 2))))
+                       (list 2 (make-polynomial-sparse 'y '((2 3)))))))
+        (dp1 (make-polynomial-dense
+              'x '(4 3 2 1)))
+        (dp2 (make-polynomial-dense
+              'x '(10 20 30))))
     ((trace 'add add) p1 p2)
     ((trace 'mul mul) pa pb)
     ((trace 'add add) ppa ppb)
     ((trace 'sub sub) pa pb)
     ((trace 'add add) dp1 dp2)
-    ((trace 'mul mul) dp1 dp2)))
+    ((trace 'mul mul) dp1 dp2)
+    ((trace 'add add) p1 dp2)
+    ((trace 'mul mul) dp1 p2)))
 
                                         ;                    GENERIC FUNCTIONS
 
@@ -35,7 +50,46 @@
 (define (raise x) (apply-generic 'raise x))
 
 
-                                        ;                    POLYNOMIAL PACKAGE
+                                        ;                    POLYNOMIAL PACKAGES
+
+(define (make-polynomial-sparse var terms)
+  ((get 'make-sparse 'polynomial) var terms))
+
+(define (make-polynomial-dense var terms)
+  ((get 'make-dense 'polynomial) var terms))
+
+;this converts from dense to sparse polynomials.
+(define (make-sparse p) (apply-generic 'make-sparse p))
+
+(define (install-polynomial-package)
+
+  (define (tag p) (attach-tag 'polynomial p))
+
+  (put 'make-sparse 'polynomial
+       (lambda (var terms) (tag ((get 'make 'sparse-polynomial) var terms))))
+  (put 'make-dense 'polynomial
+       (lambda (var terms) (tag ((get 'make 'dense-polynomial) var terms))))
+
+  (put 'add '(polynomial polynomial)
+       (lambda (p1 p2) (tag (add p1 p2))))
+  
+  (put-commutative
+   'add 'scheme-number 'polynomial
+   (lambda (n p) (tag (add (make-scheme-number n)) p)))
+
+  (put 'mul '(polynomial polynomial)
+       (lambda (p1 p2) (tag (mul p1 p2))))
+
+  (put-commutative
+   'mul 'scheme-number 'polynomial
+   (lambda (n p) (tag (mul (make-scheme-number n) p))))
+
+  (put '=zero? '(polynomial) 
+       (lambda (p) (=zero? p)))
+
+  'done)
+
+
 
 (define (make-dense-polynomial var terms)
   ((get 'make 'dense-polynomial) var terms))
@@ -92,7 +146,7 @@
     (all =zero? (term-list p)))
   
   (define (combine-number-poly op n p)
-    ;; Elevate a number to a compatible polynomial,
+    ;; Elevate a number to a compatible polynoqmial,
     ;; then retag both and combine with a given generic.
     (let ((tn (make-scheme-number n)))
       (let ((p2 (make-constant-poly (variable p) tn)))
@@ -100,6 +154,25 @@
 
   ;; interface to rest of the system
   (define (tag p) (attach-tag 'dense-polynomial p))
+
+  (define (make-sparse p)
+    (let ((order-list (count (length (term-list p))))
+          (coef-list (term-list p)))
+     (make-sparse-polynomial (variable p)
+                             (map list coef-list order-list))))
+
+  (put-commutative
+   'add 'dense-polynomial 'sparse-polynomial
+   (lambda (d s) (add
+             (make-sparse d)
+             (attach-tag 'sparse-polynomial s))))
+
+  (put-commutative
+   'mul 'dense-polynomial 'sparse-polynomial
+   (lambda (d s)
+     (mul
+      (make-sparse d)
+      (attach-tag 'sparse-polynomial s))))
 
   (put 'make 'dense-polynomial
        (lambda (var term-list) (make-poly var term-list)))
@@ -123,15 +196,14 @@
        (lambda (var terms)
          (tag (make-poly var terms))))
 
-  ;; (set! combine-number-poly (trace 'combine-number-poly combine-number-poly))
+  (put 'make-sparse '(dense-polynomial) make-sparse)
   
   'done)
 
+(define (make-sparse-polynomial var terms)
+  ((get 'make 'sparse-polynomial) var terms))
 
-(define (make-polynomial var terms)
-  ((get 'make 'polynomial) var terms))
-
-(define (install-polynomial-package)
+(define (install-sparse-polynomial-package)
   ;; internal procedures
   ;; representation of poly
   (define (make-poly variable term-list)
@@ -215,34 +287,34 @@
     (all =zero? (map coeff (term-list p))))
   
   (define (combine-number-poly op n p)
-    ;; Elevate a number to a compatible polynomial,
+    ;; Elevate a number to a compatible sparse-polynomial,
     ;; then retag both and combine generically.
     (let ((tn (make-scheme-number n)))
       (let ((p2 (make-constant-poly (variable p) tn)))
         (apply-generic op (tag p2) (tag p)))))
 
   ;; interface to rest of the system
-  (define (tag p) (attach-tag 'polynomial p))
+  (define (tag p) (attach-tag 'sparse-polynomial p))
 
-  (put 'make 'polynomial
+  (put 'make 'sparse-polynomial
        (lambda (var terms)
          (tag (make-poly var terms))))
 
-  (put 'add '(polynomial polynomial)
+  (put 'add '(sparse-polynomial sparse-polynomial)
        (lambda (p1 p2) (tag (add-poly p1 p2))))
   (put-commutative
-   'add 'scheme-number 'polynomial
+   'add 'scheme-number 'sparse-polynomial
    (lambda (n p) (combine-number-poly 'add n p)))
   
-  (put 'mul '(polynomial polynomial)
+  (put 'mul '(sparse-polynomial sparse-polynomial)
        (lambda (p1 p2) (tag (mul-poly p1 p2))))
   (put-commutative
-   'mul 'scheme-number 'polynomial
+   'mul 'scheme-number 'sparse-polynomial
    (lambda (n p) (combine-number-poly 'mul n p)))
   
-  (put '=zero? '(polynomial)
+  (put '=zero? '(sparse-polynomial)
        (lambda (term-list) (poly-=zero? term-list)))
-  (put 'make 'polynomial
+  (put 'make 'sparse-polynomial
        (lambda (var terms)
          (tag (make-poly var terms))))
 
@@ -431,11 +503,17 @@
   
   (reverse (map-fill-accum fun arg-lists fills nil)))
 
+(define (count n)
+  (define (count-inner n accum)
+    (if (< n 0) accum
+        (count-inner (- n 1) (cons n accum))))
+  (count-inner (- n 1) nil))
 
 
                                         ;                    INSTALLING / TRACING
 
 (install-polynomial-package)
+(install-sparse-polynomial-package)
 (install-scheme-number-package)
 (install-dense-polynomial-package)
 
