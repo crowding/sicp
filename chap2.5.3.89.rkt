@@ -1,18 +1,13 @@
 #lang planet neil/sicp
 
-;;; Exercise 2.88.
-;;; 
-;;; Defining a "generic negation operation" seems unnecessary, as
-;;; negation is just multiplication by the polynomial -1 and we have
-;;; that already. However since even constant polynomials in our system
-;;; have a "variable" they are defined over, negation means constructing
-;;; a -1 polynomial to match the variable of interest, which warrants some
-;;; abstraction.
-;;;
-;;; I chose to implement multiplication and addition between
-;;; polynomials and numbers, but not to have "sub" as a generic
-;;; operation. Instead "sub" means multiplying by -1 and
-;;; adding.
+;;; Exercise 2.89
+
+;; The 'dense-polynomial package is added below.
+
+;; There is a lot of shared interfacing code between the
+;; 'dense-polynomial package and the polynomial package. Is it better
+;; to insulate the data types from each other, or would it be better
+;; for common algorithms be factored out?
 
 (define (demo)
   (install-polynomial-package)
@@ -27,11 +22,15 @@
         ;; (1y^0)(x^0) + (2y)x + (3y^2)x^2
         (ppb (make-polynomial 'x (list (list 0 (make-polynomial 'y '((0 1))))
                                        (list 1 (make-polynomial 'y '((1 2))))
-                                       (list 2 (make-polynomial 'y '((2 3))))))))
+                                       (list 2 (make-polynomial 'y '((2 3)))))))
+        (dp1 (make-dense-polynomial 'x '(4 3 2 1)))
+        (dp2 (make-dense-polynomial 'x '(10 20 30))))
     ((trace 'add add) p1 p2)
     ((trace 'mul mul) pa pb)
     ((trace 'add add) ppa ppb)
-    ((trace 'sub sub) pa pb)))
+    ((trace 'sub sub) pa pb)
+    ((trace 'add add) dp1 dp2)
+    ((trace 'mul mul) dp1 dp2)))
 
                                         ;                    GENERIC FUNCTIONS
 
@@ -44,6 +43,97 @@
 
 
                                         ;                    POLYNOMIAL PACKAGE
+
+(define (make-dense-polynomial var terms)
+  ((get 'make 'dense-polynomial) var terms))
+
+(define (install-dense-polynomial-package)
+  ;; internal representation
+  ;; there is a list of coefficients, starting with 0
+  (define (make-poly variable term-list)
+    (cons variable term-list))
+  (define (variable p) (car p))
+  (define (term-list p) (cdr p))
+
+  (define (the-empty-termlist) '())
+  (define (first-term term-list) (car term-list))
+  (define (rest-terms term-list) (cdr term-list))
+
+  (define (variable? x) (symbol? x))
+  (define (same-variable? v1 v2)
+    (and (variable? v1) (variable? v2) (eq? v1 v2)))
+
+  (define (make-constant-poly var const)
+    (make-poly var (list const)))
+
+  (define (add-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+        (make-poly (variable p1)
+                   (add-terms (term-list p1)
+                              (term-list p2)))
+        (error "Polys not in same var: ADD-POLY"
+               (list p1 p2))))
+
+  (define (add-terms L1 L2) ;add-fill fills out short lists.
+    (map-fill add (list L1 L2) '(0 0)))
+
+  (define (mul-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+        (make-poly (variable p1)
+                   (mul-terms (term-list p1)
+                              (term-list p2)))
+        (error "Polys not in same var: ADD-POLY"
+               (list p1 p2))))
+
+  (define (mul-terms L1 L2)
+    (if (null? L1)
+        (the-empty-termlist)
+        ;;(ax^0+bx^1+...)*(mx^1+nx^2+...) ==
+        ;;a*(mx^0+nx^1+...)+(bx^1+cx^2)*
+        (let ((first (map-fill mul
+                               (list '() L2)
+                               (list (first-term L1) nil))))
+          (add-terms first (mul-terms (rest-terms L1) (cons 0 L2))))))
+
+  (define (poly-=zero? p)
+    (all =zero? (term-list p)))
+  
+  (define (combine-number-poly op n p)
+    ;; Elevate a number to a compatible polynomial,
+    ;; then retag both and combine with a given generic.
+    (let ((tn (make-scheme-number n)))
+      (let ((p2 (make-constant-poly (variable p) tn)))
+        (apply-generic op (tag p2) (tag p)))))
+
+  ;; interface to rest of the system
+  (define (tag p) (attach-tag 'dense-polynomial p))
+
+  (put 'make 'dense-polynomial
+       (lambda (var term-list) (make-poly var term-list)))
+
+  (put 'add '(dense-polynomial dense-polynomial)
+       (lambda (p1 p2) (tag (add-poly p1 p2))))
+  (put-commutative
+   'add 'scheme-number 'dense-polynomial
+   (lambda (n p) (combine-number-poly 'add n p)))
+  
+  (put 'mul '(dense-polynomial dense-polynomial)
+       (lambda (p1 p2) (tag (mul-poly p1 p2))))
+  (put-commutative
+   'mul 'scheme-number 'dense-polynomial
+   (lambda (n p) (combine-number-poly 'mul n p)))
+  
+  (put '=zero? '(dense-polynomial)
+       (lambda (term-list) (poly-=zero? term-list)))
+  
+  (put 'make 'dense-polynomial
+       (lambda (var terms)
+         (tag (make-poly var terms))))
+
+  ;; (set! combine-number-poly (trace 'combine-number-poly combine-number-poly))
+  
+  'done)
+
 
 (define (make-polynomial var terms)
   ((get 'make 'polynomial) var terms))
@@ -163,8 +253,6 @@
        (lambda (var terms)
          (tag (make-poly var terms))))
 
-  ;; (set! combine-number-poly (trace 'combine-number-poly combine-number-poly))
-  
   'done)
 
                                         ;                     APPLY GENERIC
@@ -328,15 +416,38 @@
       #t
       (and (pred (car list)) (all pred (cdr list)))))
 
+(define (map-fill fun arg-lists fills)
+  ;;"map" but extend any short lists in arg-lists with corresponding fills.
+  ;;e.g. (map-fill-accum '+ '((1 2 3) (3)) '(0 4)) => (4 6 7)
+
+  (define (fcar x fill)
+    (if (null? x) fill (car x)))
+
+  (define (fcdr x)
+    (if (null? x) nil
+        (cdr x)))
+
+  (define (map-fill-accum fun arg-lists fills out)
+    (if (all null? arg-lists)
+        out
+        (let ((args (map fcar arg-lists fills)))
+          (let ((element (apply fun args)))
+            (map-fill-accum
+             fun (map fcdr arg-lists) fills
+             (cons element out))))))
+  
+  (reverse (map-fill-accum fun arg-lists fills nil)))
+
+
 
                                         ;                    INSTALLING / TRACING
 
-;; (set! apply-generic (trace 'apply-generic apply-generic))
-
 (install-polynomial-package)
 (install-scheme-number-package)
+(install-dense-polynomial-package)
 
 ;; (set! mul (trace 'mul mul))
 ;; (set! add (trace 'add add))
 ;; (set! apply-generic (trace 'apply-generic apply-generic))
+
 
