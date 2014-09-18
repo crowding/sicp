@@ -2,6 +2,12 @@
 
 ;;; Exercise 2.92
 
+;; That is to say, adding a polynomial in X to a polynomial in Y
+;; produces a polynomial in X. Moreover, a polynomial in X is allowed
+;; to have coefficients that are polynomials in Y, but not vice versa.
+;; * First, I extended make-poly to perform these checks.
+
+
 (define (demo)
   (let ((p1 (make-polynomial 'x '((10 2) (5 1) (0 1))))
         (p2 (make-polynomial 'x '((5 2) (2 10) (0 13))))
@@ -32,6 +38,8 @@
 (define (mul x y) (apply-generic 'mul x y))
 (define (div x y) (apply-generic 'div x y))
 (define (=zero? x) (apply-generic '=zero? x))
+(define (var x) (apply-generic 'var x))
+(define (terms x) (apply-generic 'terms x))
 (define (raise x) (apply-generic 'raise x))
 
 
@@ -45,10 +53,12 @@
   ;; representation of poly
   (define (make-poly variable term-list)
     ;;assert that terms descend in order
-    (if (descending-terms? term-list)
-        (cons variable term-list)
-        (error "terms not in descending order" term-list)))
-  
+    (if (not (descending-terms? term-list))
+        (error "terms are not in descending order" term-list))
+    (if (not (permissible-nesting? variable term-list))
+        (error "Polynomials improperly nested" term-list))        
+    (cons variable term-list))
+
   (define (variable p) (car p))
   (define (term-list p) (cdr p))
 
@@ -81,6 +91,20 @@
   (define (make-term order coeff) (list order coeff))
   (define (order term) (car term))
   (define (coeff term) (cadr term))
+  
+  (define (permissible-nesting? variable term-list)
+    (define (nested-term? variable term)
+      (let ((nested-var (var (coeff term)))
+            (nested-terms (terms (coeff term))))
+        (if nested-var
+            (if (symbol<? variable nested-var)
+                (all (curl nested-term? nested-var) nested-terms)
+                #f)
+            #t)))
+    (set! nested-term? (trace 'nested-term? nested-term?))
+    (all (curl nested-term? variable) term-list))
+
+  (set! permissible-nesting? (trace 'permissible-nesting? permissible-nesting?))
 
   (define (add-poly p1 p2)
     (if (same-variable? (variable p1) (variable p2))
@@ -176,6 +200,10 @@
   (put 'make 'polynomial
        (lambda (var terms)
          (tag (make-poly var terms))))
+
+  (put 'var '(polynomial) variable)
+
+  (put 'terms '(polynomial) term-list)
 
   (put 'add '(polynomial polynomial)
        (lambda (p1 p2) (tag (add-poly p1 p2))))
@@ -319,6 +347,9 @@
   (put '=zero? '(scheme-number)
        (lambda (x) (= 0 x)))
   (put 'make 'scheme-number (lambda (x) x))
+  (put 'var '(scheme-number) (lambda (x) #f))
+  (put 'terms '(scheme-number) (lambda (x) nil))
+
   'done)
 
 
@@ -358,13 +389,20 @@
               (cdr rest))))
   (iter initial sequence))
 
-
 (define (all pred list)
   ;; apply predicate to each item; return #t if all results are non-#f.
   (if (null? list)
       #t
       (and (pred (car list)) (all pred (cdr list)))))
 
+(define (curl proc . args)
+  (lambda more-args (apply proc (append args more-args))))
+
+(define (curr proc . args)
+  (lambda more-args (apply proc (append more-args args))))
+
+(define (symbol<? x y)
+  (string<? (symbol->string x) (symbol->string y)))
 
                                         ;                    INSTALLING / TRACING
 
@@ -376,5 +414,6 @@
 ;; (set! mul (trace 'mul mul))
 ;; (set! add (trace 'add add))
 ;; (set! apply-generic (trace 'apply-generic apply-generic))
+
 
 
