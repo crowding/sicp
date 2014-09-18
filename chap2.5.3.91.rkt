@@ -2,24 +2,32 @@
 
 ;;; Exercise 2.91 (following on code from exercise 2.88)
 
+;; Note that orders of terms DESCEND in the sparse poly
+;; representation. I didn't see that before, so I added a check in
+;; make-poly.
+
 (define (demo)
-  (install-polynomial-package)
-  (let ((p1 (make-polynomial 'x '((0 1) (5 1) (10 2))))
-        (p2 (make-polynomial 'x '((0 13) (5 2) (2 10))))
-        (pa (make-polynomial 'x '((2 2) (5 8))))
-        (pb (make-polynomial 'x '((3 1) (7 4))))
+  (let ((p1 (make-polynomial 'x '((10 2) (5 1) (0 1))))
+        (p2 (make-polynomial 'x '((5 2) (2 10) (0 13))))
+        (pa (make-polynomial 'x '((5 8) (2 2))))
+        (pb (make-polynomial 'x '((7 4) (3 1))))
         ;; (3y^2)(x^0) + (2y)x + (1y^0)x^2
-        (ppa (make-polynomial 'x (list (list 0 (make-polynomial 'y '((2 3))))
+        (ppa (make-polynomial 'x (list (list 2 (make-polynomial 'y '((0 1))))
                                        (list 1 (make-polynomial 'y '((1 2))))
-                                       (list 2 (make-polynomial 'y '((0 1)))))))
+                                       (list 0 (make-polynomial 'y '((2 3)))))))
         ;; (1y^0)(x^0) + (2y)x + (3y^2)x^2
-        (ppb (make-polynomial 'x (list (list 0 (make-polynomial 'y '((0 1))))
+        (ppb (make-polynomial 'x (list (list 2 (make-polynomial 'y '((2 3))))
                                        (list 1 (make-polynomial 'y '((1 2))))
-                                       (list 2 (make-polynomial 'y '((2 3))))))))
+                                       (list 0 (make-polynomial 'y '((0 1))))))))
     ((trace 'add add) p1 p2)
     ((trace 'mul mul) pa pb)
     ((trace 'add add) ppa ppb)
-    ((trace 'sub sub) pa pb)))
+    ((trace 'sub sub) pa pb)
+    ((trace 'div div)
+     (make-polynomial 'x '((5 1) (0 -1)))
+     (make-polynomial 'x '((2 1) (0 -1))))))
+
+
 
                                         ;                    GENERIC FUNCTIONS
 
@@ -40,7 +48,11 @@
   ;; internal procedures
   ;; representation of poly
   (define (make-poly variable term-list)
-    (cons variable term-list))
+    ;;assert that terms descend in order
+    (if (descending-terms? term-list)
+        (cons variable term-list)
+        (error "terms not in descending order" term-list)))
+  
   (define (variable p) (car p))
   (define (term-list p) (cdr p))
 
@@ -49,6 +61,13 @@
   (define (same-variable? v1 v2)
     (and (variable? v1) (variable? v2) (eq? v1 v2)))
 
+  (define (descending-terms? term-list)
+    (cond ((null? term-list) #t)
+          ((null? (cdr term-list)) #t)
+          ((<= (order (car term-list))
+               (order (cadr term-list))) #f)
+          (else (descending-terms? (cdr term-list)))))
+  
   (define (make-constant-poly var const)
     (make-poly var (list (list 0 const))))
   
@@ -116,8 +135,40 @@
                       (mul (coeff t1) (coeff t2)))
            (mul-term-by-all-terms t1 (rest-terms L))))))
 
+  (define (sub-terms L1 L2)
+    (add-terms L1 (mul-terms L2 '((0 -1)))))
+
+  (define (div-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+        (let ((divided (div-terms (term-list p1)
+                                  (term-list p2))))
+          (list (make-poly
+                 (variable p1)
+                 (car divided))
+                (make-poly
+                 (variable p1)
+                 (cadr divided))))))
+
+  (define (div-terms L1 L2)
+    (if (empty-termlist? L1)
+        (list (the-empty-termlist) (the-empty-termlist))
+        (let ((t1 (first-term L1))
+              (t2 (first-term L2)))
+          (if (> (order t2) (order t1))
+              (list (the-empty-termlist) L1) ; reimainder
+              (let* ((new-c (div (coeff t1) (coeff t2)))
+                     (new-o (- (order t1) (order t2)))
+                     (quotient-term-list (list  (make-term new-o new-c)))
+                     (term-remainder (sub-terms L1 (mul-terms quotient-term-list L2)))
+                     (rest-of-result (div-terms term-remainder L2))
+                     (full-quotient (add-terms quotient-term-list (car rest-of-result))))
+                (list full-quotient (cadr rest-of-result)))))))
+
   (define (poly-=zero? p)
     (all =zero? (map coeff (term-list p))))
+
+  ;; interface to rest of the system
+  (define (tag p) (attach-tag 'polynomial p))
   
   (define (combine-number-poly op n p)
     ;; Elevate a number to a compatible polynomial,
@@ -125,9 +176,6 @@
     (let ((tn (make-scheme-number n)))
       (let ((p2 (make-constant-poly (variable p) tn)))
         (apply-generic op (tag p2) (tag p)))))
-
-  ;; interface to rest of the system
-  (define (tag p) (attach-tag 'polynomial p))
 
   (put 'make 'polynomial
        (lambda (var terms)
@@ -144,6 +192,11 @@
   (put-commutative
    'mul 'scheme-number 'polynomial
    (lambda (n p) (combine-number-poly 'mul n p)))
+
+  (put 'div '(polynomial polynomial)
+       (lambda (p1 p2)
+         (let ((result (div-poly p1 p2)))
+           (map tag result))))
   
   (put '=zero? '(polynomial)
        (lambda (term-list) (poly-=zero? term-list)))
@@ -327,4 +380,5 @@
 ;; (set! mul (trace 'mul mul))
 ;; (set! add (trace 'add add))
 ;; (set! apply-generic (trace 'apply-generic apply-generic))
+
 
