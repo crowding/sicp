@@ -2,11 +2,19 @@
 
 ;;; Exercise 2.92
 
+;; Imposing an ordering on variables;
+
 ;; That is to say, adding a polynomial in X to a polynomial in Y
 ;; produces a polynomial in X. Moreover, a polynomial in X is allowed
 ;; to have coefficients that are polynomials in Y, but not vice versa.
 ;; * First, I extended make-poly to perform these checks.
+;; * Then, I wrote "wrap-poly" which wraps a polynomial as a
+;;   zero order term in a higner polynomial, "wrapping-op" which
+;; checks for and wraps vars before applying a binom.
+;; mul-poly and wrao-poly are both defined in terms of wrapping-op.
 
+;; Note that there can be simplification of nested polynomials, like
+;; extracting zero-order terms.
 
 (define (demo)
   (let ((p1 (make-polynomial 'x '((10 2) (5 1) (0 1))))
@@ -20,14 +28,16 @@
         ;; (1y^0)(x^0) + (2y)x + (3y^2)x^2
         (ppb (make-polynomial 'x (list (list 2 (make-polynomial 'y '((2 3))))
                                        (list 1 (make-polynomial 'y '((1 2))))
-                                       (list 0 (make-polynomial 'y '((0 1))))))))
+                                       (list 0 (make-polynomial 'y '((0 1)))))))
+        (ppy (make-polynomial 'y '((1 1)))))
     ((trace 'add add) p1 p2)
     ((trace 'mul mul) pa pb)
     ((trace 'add add) ppa ppb)
     ((trace 'sub sub) pa pb)
     ((trace 'div div)
      (make-polynomial 'x '((5 1) (0 -1)))
-     (make-polynomial 'x '((2 1) (0 -1))))))
+     (make-polynomial 'x '((2 1) (0 -1))))
+    ((trace 'mul mul) ppb ppy)))
 
 
 
@@ -41,6 +51,7 @@
 (define (var x) (apply-generic 'var x))
 (define (terms x) (apply-generic 'terms x))
 (define (raise x) (apply-generic 'raise x))
+(define (wrap x) (apply-generic 'wrap x))
 
 
                                         ;                    POLYNOMIAL PACKAGE
@@ -76,7 +87,7 @@
   
   (define (make-constant-poly var const)
     (make-poly var (list (list 0 const))))
-  
+
   ;; representation of terms and term lists
   (define (adjoin-term term term-list)
     (if (=zero? (coeff term))
@@ -93,26 +104,34 @@
   (define (coeff term) (cadr term))
   
   (define (permissible-nesting? variable term-list)
-    (define (nested-term? variable term)
+    (define (permissible-nested-term? variable term)
       (let ((nested-var (var (coeff term)))
             (nested-terms (terms (coeff term))))
         (if nested-var
             (if (symbol<? variable nested-var)
-                (all (curl nested-term? nested-var) nested-terms)
+                (all (curl permissible-nested-term? nested-var) nested-terms)
                 #f)
             #t)))
-    (set! nested-term? (trace 'nested-term? nested-term?))
-    (all (curl nested-term? variable) term-list))
+    (all (curl permissible-nested-term? variable) term-list))
 
-  (set! permissible-nesting? (trace 'permissible-nesting? permissible-nesting?))
+  (define (wrap-poly var poly)
+    (make-poly var (list (list 0 (tag poly)))))
 
-  (define (add-poly p1 p2)
-    (if (same-variable? (variable p1) (variable p2))
-        (make-poly (variable p1)
-                   (add-terms (term-list p1)
-                              (term-list p2)))
-        (error "Polys not in same var: ADD-POLY"
-               (list p1 p2))))
+  (define (wrapping-op op)
+    (lambda (p1 p2)
+      (let ((wrap-which
+             (if (same-variable? (variable p1) (variable p2)) 'neither
+                 (if (symbol<? (variable p1) (variable p2))
+                     'second 'first))))
+        (let ((wp1 (case wrap-which
+                     ((first) (wrap-poly (variable p2) p1))
+                     ((second neither) p1)))
+              (wp2 (case wrap-which
+                     ((first neither) p2)
+                     ((second) (wrap-poly (variable p1) p2)))))
+          (make-poly (variable wp1)
+                     (op (term-list wp1) (term-list wp2)))))))
+  (define (add-poly p1 p2) ((wrapping-op add-terms) p1 p2))
 
   (define (add-terms L1 L2)
     (cond ((empty-termlist? L1) L2)
@@ -131,14 +150,8 @@
                                 (add (coeff t1) (coeff t2)))
                      (add-terms (rest-terms L1)
                                 (rest-terms L2)))))))))
-  
-  (define (mul-poly p1 p2)
-    (if (same-variable? (variable p1) (variable p2))
-        (make-poly (variable p1)
-                   (mul-terms (term-list p1)
-                              (term-list p2)))
-        (error "Polys not in same var: ADD-POLY"
-               (list p1 p2))))
+
+  (define (mul-poly p1 p2) ((wrapping-op mul-terms) p1 p2))
 
   (define (mul-terms L1 L2)
     (if (empty-termlist? L1)
@@ -228,8 +241,8 @@
        (lambda (var terms)
          (tag (make-poly var terms))))
 
-  ;; (set! combine-number-poly (trace 'combine-number-poly combine-number-poly))
-  
+  (put 'wrap '(variable polynomial) wrap-poly)
+
   'done)
 
                                         ;                     APPLY GENERIC
@@ -248,10 +261,12 @@
 
 (define (attach-tag type-tag contents)
   (cond ((equal? type-tag 'scheme-number) contents)
+        ((equal? type-tag 'variable) contents)
         (else (cons type-tag contents))))
 
 (define (type-tag datum)
   (cond ((number? datum) 'scheme-number)
+        ((symbol? datum) 'variable)
         ((pair? datum) (car datum))
         (else (error "No type tag" datum))))
 
