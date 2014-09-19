@@ -1,6 +1,25 @@
 #lang planet neil/sicp
 
 ;;; Exercise 2.95
+(define (prob95)
+  (let ((p1 (make-polynomial 'x '((2 1) (1 -2) (0 1))))
+        (p2 (make-polynomial 'x '((2 11) (0 7))))
+        (p3 (make-polynomial 'x '((1 13) (0 5)))))
+    (let ((q1 ((trace 'mul mul) p1 p2))
+          (q2 ((trace 'mul mul) p1 p3)))
+      (trace-gcd-terms)
+      (greatest-common-divisor q1 q2))))
+
+;; The notion of a "GCD" for polynomials does not determine a constant
+;; factor.  If A is a constant, then the fact that p1 * p2 = q1 and p1
+;; * p3 = q2 could easily be written A*p1 * (1/A)p2 = q1 and (A)p1 *
+;; (1/A)p3 = q2.  So which is the GCD(q1, q2), p1, or A*p1?
+;; "Greatest" in polynomial GCD here really means "greatest order"
+;; without regard to coefficients.
+
+;; In the example, the original_GCD reduces to 
+;; gcd( 11x^4 - 22x^3 + 19x^2 -14x + 7,  13x^3 + 2x^11 + x^3 + 5)
+;; which leads to a non-integral coefficient on the next step.
 
 (define (demo)
   (let ((p1 (make-polynomial 'x '((10 2) (5 1) (0 1))))
@@ -249,7 +268,13 @@
 
   (put 'wrap '(variable polynomial) wrap-poly)
 
+  (put 'trace-gcd-terms 'polynomial
+       (lambda () (set! gcd-terms (trace 'gcd-terms gcd-terms))))
+  
   'done)
+
+(define (trace-gcd-terms)
+  ((get 'trace-gcd-terms 'polynomial)))
 
                                         ;                     APPLY GENERIC
 (define (apply-generic op . args)
