@@ -2,6 +2,8 @@
 
 ;;; Exercise 2.93
 
+;; It divides, indeed it does not simplify.
+
 (define (demo)
   (let ((p1 (make-polynomial 'x '((10 2) (5 1) (0 1))))
         (p2 (make-polynomial 'x '((5 2) (2 10) (0 13))))
@@ -15,7 +17,9 @@
         (ppb (make-polynomial 'x (list (list 2 (make-polynomial 'y '((2 3))))
                                        (list 1 (make-polynomial 'y '((1 2))))
                                        (list 0 (make-polynomial 'y '((0 1)))))))
-        (ppy (make-polynomial 'y '((1 1)))))
+        (ppy (make-polynomial 'y '((1 1))))
+        (rp1 (make-polynomial 'x '((2 1) (0 1))))
+        (rp2 (make-polynomial 'x '((3 1) (0 1)))))
     ((trace 'add add) p1 p2)
     ((trace 'mul mul) pa pb)
     ((trace 'add add) ppa ppb)
@@ -23,9 +27,9 @@
     ((trace 'div div)
      (make-polynomial 'x '((5 1) (0 -1)))
      (make-polynomial 'x '((2 1) (0 -1))))
-    ((trace 'mul mul) ppb ppy)))
-
-
+    ((trace 'mul mul) ppb ppy)
+    (let ((rf (make-rational rp2 rp1)))
+      ((trace 'add add) rf rf))))
 
                                         ;                    GENERIC FUNCTIONS
 
@@ -330,6 +334,40 @@
   (let ((target (highest-type (map type-tag args))))
     (map (lambda (x) (raise-to target x)) args)))
 
+                                        ;                    RATIONAL TYPE
+
+
+(define (install-rational-package)
+  ;; internal procedures
+  (define (numer x) (car x))
+  (define (denom x) (cdr x))
+  (define (make-rat n d) (cons n d))
+  (define (add-rat x y)
+    (make-rat (add (mul (numer x) (denom y))
+                 (mul (numer y) (denom x)))
+              (mul (denom x) (denom y))))
+  (define (sub-rat x y)
+    (make-rat (sub (mul (numer x) (denom y))
+                 (mul (numer y) (denom x)))
+              (mul (denom x) (denom y))))
+  (define (mul-rat x y)
+    (make-rat (mul (numer x) (numer y))
+              (mul (denom x) (denom y))))
+  (define (div-rat x y)
+    (make-rat (mul (numer x) (denom y))
+              (mul (denom x) (numer y))))
+  ;; interface to rest of the system
+  (define (tag x) (attach-tag 'rational x))
+  (put 'add '(rational rational) (lambda (x y) (tag (add-rat x y))))
+  (put 'sub '(rational rational) (lambda (x y) (tag (sub-rat x y))))
+  (put 'mul '(rational rational) (lambda (x y) (tag (mul-rat x y))))
+  (put 'div '(rational rational) (lambda (x y) (tag (div-rat x y))))
+  (put 'make 'rational (lambda (n d) (tag (make-rat n d))))
+  'done)
+
+(define (make-rational n d)
+  ((get 'make 'rational) n d))
+
 
                                         ;                    NUMBER TYPE
 (define (make-scheme-number n)
@@ -411,10 +449,12 @@
 
 (install-polynomial-package)
 (install-scheme-number-package)
+(install-rational-package)
 
 ;; (set! mul (trace 'mul mul))
 ;; (set! add (trace 'add add))
 ;; (set! apply-generic (trace 'apply-generic apply-generic))
+
 
 
 
