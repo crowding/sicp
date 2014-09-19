@@ -2,6 +2,12 @@
 
 ;;; Exercise 2.94
 
+;; Rather than signaling an error on GCD of disparate variables, this
+;; continues the trick of imposing an order of variables from the last
+;; problem. (Is GCD of disparate polynomials a coherent concept?)
+
+;;As worked out by hand, gcd(x^4 - x^3 - 2x^2 + 2, x^3 - x) = -x^2 + x.
+
 (define (demo)
   (let ((p1 (make-polynomial 'x '((10 2) (5 1) (0 1))))
         (p2 (make-polynomial 'x '((5 2) (2 10) (0 13))))
@@ -17,7 +23,9 @@
                                        (list 0 (make-polynomial 'y '((0 1)))))))
         (ppy (make-polynomial 'y '((1 1))))
         (rp1 (make-polynomial 'x '((2 1) (0 1))))
-        (rp2 (make-polynomial 'x '((3 1) (0 1)))))
+        (rp2 (make-polynomial 'x '((3 1) (0 1))))
+        (gp1 (make-polynomial 'x '((4 1) (3 -1) (2 -2) (1 2))))
+        (gp2 (make-polynomial 'x '((3 1) (1 -1)))))
     ((trace 'add add) p1 p2)
     ((trace 'mul mul) pa pb)
     ((trace 'add add) ppa ppb)
@@ -27,7 +35,9 @@
      (make-polynomial 'x '((2 1) (0 -1))))
     ((trace 'mul mul) ppb ppy)
     (let ((rf (make-rational rp2 rp1)))
-      ((trace 'add add) rf rf))))
+      ((trace 'add add) rf rf))
+    ((trace 'greatest-common-divisor greatest-common-divisor)
+     gp1 gp2)))
 
                                         ;                    GENERIC FUNCTIONS
 
@@ -40,6 +50,7 @@
 (define (terms x) (apply-generic 'terms x))
 (define (raise x) (apply-generic 'raise x))
 (define (wrap x) (apply-generic 'wrap x))
+(define (greatest-common-divisor n d) (apply-generic 'greatest-common-divisor n d))
 
 
                                         ;                    POLYNOMIAL PACKAGE
@@ -188,6 +199,16 @@
   (define (poly-=zero? p)
     (all =zero? (map coeff (term-list p))))
 
+  (define (gcd-poly a b) ((wrapping-op gcd-terms) a b))
+
+  (define (gcd-terms a b)
+    (if (empty-termlist? b)
+        a
+        (gcd-terms b (remainder-terms a b))))
+
+  (define (remainder-terms a b)
+    (cadr (div-terms a b)))
+  
   ;; interface to rest of the system
   (define (tag p) (attach-tag 'polynomial p))
   
@@ -228,6 +249,9 @@
   (put 'make 'polynomial
        (lambda (var terms)
          (tag (make-poly var terms))))
+
+  (put 'greatest-common-divisor '(polynomial polynomial)
+       (lambda (a b) (tag (gcd-poly a b))))
 
   (put 'wrap '(variable polynomial) wrap-poly)
 
@@ -339,7 +363,9 @@
   ;; internal procedures
   (define (numer x) (car x))
   (define (denom x) (cdr x))
+
   (define (make-rat n d) (cons n d))
+  
   (define (add-rat x y)
     (make-rat (add (mul (numer x) (denom y))
                  (mul (numer y) (denom x)))
@@ -381,6 +407,8 @@
        (lambda (x y) (* x y)))
   (put 'div '(scheme-number scheme-number)
        (lambda (x y) (/ x y)))
+  (put 'greatest-common-divisor '(scheme-number scheme-number)
+       (lambda (a b) (gcd a b)))
   (put '=zero? '(scheme-number)
        (lambda (x) (= 0 x)))
   (put 'make 'scheme-number (lambda (x) x))
