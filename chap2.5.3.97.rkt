@@ -2,6 +2,24 @@
 
 ;;; Exercise 2.97
 
+;; Implementation was relatively uneventful. The example given in the
+;; book is (x + 1)/(x^3 - 1) + (x)/(x^2 - 1) which expands to (x^4 +
+;; x^3 + x^2 - 2x - 1)/(x^5 - x^3 + x^2 - 1) (which is what
+;; reduce-terms gets, with a sign flip which is OK.)  reduce-terms
+;; produces (x^3 + 2x^2 + 3x + 1)/(x^4 + x^3 - x - 1) (ignoring the
+;; sign flip) like the book. By hand dividing the original by reduced
+;; numerator and denominator, I find that there was a common factor of
+;; (x - 1) eliminated.
+
+(define (demo97)
+  (define  p1 (make-polynomial 'x '((1 1) (0  1))))
+  (define  p2 (make-polynomial 'x '((3 1) (0 -1))))
+  (define  p3 (make-polynomial 'x '((1 1))))
+  (define  p4 (make-polynomial 'x '((2 1) (0 -1))))
+  (let ((rf1 ((trace 'make-rational make-rational) p1 p2))
+        (rf2 ((trace 'make-rational make-rational) p3 p4)))
+    ((trace 'add add) rf1 rf2)))
+
 (define (demo)
   (let ((p1 (make-polynomial 'x '((10 2) (5 1) (0 1))))
         (p2 (make-polynomial 'x '((5 2) (2 10) (0 13))))
@@ -45,7 +63,7 @@
 (define (raise x) (apply-generic 'raise x))
 (define (wrap x) (apply-generic 'wrap x))
 (define (greatest-common-divisor n d) (apply-generic 'greatest-common-divisor n d))
-
+(define (reduce x y) (apply-generic 'reduce x y))
 
                                         ;                    POLYNOMIAL PACKAGE
 
@@ -178,6 +196,7 @@
                  (variable p1)
                  (cadr divided))))))
 
+
   (define (div-terms L1 L2)
     (if (empty-termlist? L1)
         (list (the-empty-termlist) (the-empty-termlist))
@@ -196,12 +215,45 @@
   (define (remainder-terms L1 L2)
     (cadr (div-terms L1 L2)))
 
+  (define (leading-coeff Q)
+    (if (empty-termlist? Q) 0 (coeff (first-term Q))))
+  
+  (define (leading-order p)
+    (if (empty-termlist? p) 0 (order (first-term p))))
+  
   (define (pseudoremainder-terms P Q)
-    (let ((o1 (if (empty-termlist? P) 0 (order (first-term P))))
-          (o2 (if (empty-termlist? Q) 0 (order (first-term Q))))
-          (c (if (empty-termlist? Q) 0 (coeff (first-term Q)))))
-      (let ((PP (expt c (+ 1 o1 (- o2)))))
-        (remainder-terms (mul-terms P (constant-terms c)) Q))))
+    (let ((PP (integerizing-factor P Q)))
+      (remainder-terms (mul-terms P (constant-terms PP)) Q)))
+
+  (define (integerizing-factor P Q)
+    (let ((o1 (leading-order P))
+          (o2 (leading-order Q))
+          (c (leading-coeff Q)))
+      (expt c (+ 1 o1 (- o2)))))
+
+  (define (reduce-poly N D)
+    (if (equal? (variable N) (variable D))
+        (let ((R (reduce-terms (term-list N) (term-list D))))
+          (list (make-poly (variable N) (car R))
+                (make-poly (variable N) (cadr R))))
+        (error "Polynomials in unequal variables" (list N D))))
+  
+  (define (reduce-terms N D)
+    (let* ((G (gcd-terms N D))
+           (faketerm (list (make-term (max (leading-order N)
+                                           (leading-order D))
+                                      1)))
+           (c (integerizing-factor faketerm g))
+           (NN (car (div-terms (mul-terms N (constant-terms c)) G)))
+           (DD (car (div-terms (mul-terms D (constant-terms c)) G)))
+           (GG (apply gcd (append (map coeff NN) (map coeff DD)))))
+      (list (divide-terms-by NN GG) (divide-terms-by DD GG))))
+
+  (define (divide-terms-by t g)
+    (let ((orders (map order t))
+          (coeffs (map coeff t)))
+      (let ((new-coeffs (map (curr / g) coeffs)))
+        (map make-term orders new-coeffs))))
   
   (define (poly-=zero? p)
     (all =zero? (map coeff (term-list p))))
@@ -215,11 +267,9 @@
 
   (define (gcd-terms a b)
     (let* ((terms (pseudogcd-terms a b))
-           (orders (map order terms))
            (coefs (map coeff terms)))
-      (let* ((g (apply gcd coefs))
-            (new-coefs (map (curr / g) coefs)))
-        (map make-term orders new-coefs))))
+      (let* ((g (apply gcd coefs)))
+        (divide-terms-by terms g))))
 
   ;; interface to rest of the system
   (define (tag p) (attach-tag 'polynomial p))
@@ -267,13 +317,17 @@
 
   (put 'wrap '(variable polynomial) wrap-poly)
 
+  (put 'reduce '(polynomial polynomial)
+       (lambda (n d)
+         (let ((R (reduce-poly n d)))
+           (list (tag (car R)) (tag (cadr R))))))
+  
   'done)
 
                                         ;                     APPLY GENERIC
 (define (apply-generic op . args)
   (let* ((types (map type-tag args))
          (proc (get op types)))
-    ;;(show " types ->" types "proc ->" proc)
     (if proc
         (apply proc (map contents args))
         (let* ((raised (raise-list args))
@@ -376,7 +430,9 @@
   (define (numer x) (car x))
   (define (denom x) (cdr x))
 
-  (define (make-rat n d) (cons n d))
+  (define (make-rat n d)
+    (let ((r (reduce n d)))
+      (cons (car r) (cadr r))))
   
   (define (add-rat x y)
     (make-rat (add (mul (numer x) (denom y))
@@ -426,6 +482,9 @@
   (put 'make 'scheme-number (lambda (x) x))
   (put 'var '(scheme-number) (lambda (x) #f))
   (put 'terms '(scheme-number) (lambda (x) nil))
+  (put 'reduce '(scheme-number scheme-number)
+       (lambda (n d) (let ((g (gcd n d)))
+                  (list (/ n g) (/ d g)))))
 
   'done)
 
@@ -492,6 +551,7 @@
 ;; (set! mul (trace 'mul mul))
 ;; (set! add (trace 'add add))
 ;; (set! apply-generic (trace 'apply-generic apply-generic))
+
 
 
 

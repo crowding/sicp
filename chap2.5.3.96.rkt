@@ -204,7 +204,7 @@
           (o2 (if (empty-termlist? Q) 0 (order (first-term Q))))
           (c (if (empty-termlist? Q) 0 (coeff (first-term Q)))))
       (let ((PP (expt c (+ 1 o1 (- o2)))))
-        (remainder-terms (mul-terms P (constant-terms c)) Q))))
+        (remainder-terms (mul-terms P (constant-terms PP)) Q))))
   
   (define (poly-=zero? p)
     (all =zero? (map coeff (term-list p))))
