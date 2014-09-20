@@ -2,6 +2,9 @@
 
 ;;; Exercise 2.96
 
+;; SICP says "order of the largest term" of P. Surely they mean "order
+;; of the leading term of P."
+
 (define (demo)
   (let ((p1 (make-polynomial 'x '((10 2) (5 1) (0 1))))
         (p2 (make-polynomial 'x '((5 2) (2 10) (0 13))))
@@ -79,8 +82,11 @@
           (else (descending-terms? (cdr term-list)))))
   
   (define (make-constant-poly var const)
-    (make-poly var (list (list 0 const))))
+    (make-poly var (constant-terms const)))
 
+  (define (constant-terms const)
+    (list (list 0 const)))
+  
   ;; representation of terms and term lists
   (define (adjoin-term term term-list)
     (if (=zero? (coeff term))
@@ -190,19 +196,34 @@
                      (full-quotient (add-terms quotient-term-list (car rest-of-result))))
                 (list full-quotient (cadr rest-of-result)))))))
 
+  (define (remainder-terms L1 L2)
+    (cadr (div-terms L1 L2)))
+
+  (define (pseudoremainder-terms P Q)
+    (let ((o1 (if (empty-termlist? P) 0 (order (first-term P))))
+          (o2 (if (empty-termlist? Q) 0 (order (first-term Q))))
+          (c (if (empty-termlist? Q) 0 (coeff (first-term Q)))))
+      (let ((PP (expt c (+ 1 o1 (- o2)))))
+        (remainder-terms (mul-terms P (constant-terms c)) Q))))
+  
   (define (poly-=zero? p)
     (all =zero? (map coeff (term-list p))))
 
   (define (gcd-poly a b) ((wrapping-op gcd-terms) a b))
 
-  (define (gcd-terms a b)
+  (define (pseudogcd-terms a b)
     (if (empty-termlist? b)
         a
-        (gcd-terms b (remainder-terms a b))))
+        (pseudogcd-terms b (pseudoremainder-terms a b))))
 
-  (define (remainder-terms a b)
-    (cadr (div-terms a b)))
-  
+  (define (gcd-terms a b)
+    (let* ((terms (pseudogcd-terms a b))
+           (orders (map order terms))
+           (coefs (map coeff terms)))
+      (let* ((g (apply gcd coefs))
+            (new-coefs (map (curr / g) coefs)))
+        (map make-term orders new-coefs))))
+
   ;; interface to rest of the system
   (define (tag p) (attach-tag 'polynomial p))
   
