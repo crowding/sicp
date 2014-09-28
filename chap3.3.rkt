@@ -432,7 +432,7 @@
 (define (front-queue queue)
   (if (empty-queue? queue)
       (error "FRONT called with an empty queue" queue)
-      (car (rear-ptr queue))))
+      (car (front-ptr queue))))
 
 (define (insert-queue! queue item)
   (let ((new-pair (cons item '())))
