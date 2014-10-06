@@ -5,14 +5,14 @@
 ;; It will recurse endlessly, as it makes a recursive
 ;; call before it checks whether to halt.
 
-;; Exercize 1.7 
+;; Exercize 1.7
 (define (sqrt x)
       (sqrt-iter 1.0 x))
 (define (sqrt-iter guess x)
       (if (good-enough? guess x)
           guess
           (sqrt-iter (improve guess x) x)))
-(define (improve guess x)
+ (define (improve guess x)
       (average guess (/ x guess)))
 (define (square x) (* x x))
 (define (average x y)
@@ -33,7 +33,7 @@
 (define (cbrt x) (cbrt-iter 1.0 x))
 (define (good-enough-cbrt? guess x)
   (<= (abs (- (* guess guess guess) x)) (* x 1e-12)))
-(define (cbrt-iter guess x) 
+(define (cbrt-iter guess x)
   (if (good-enough-cbrt? guess x)
       guess
       (cbrt-iter (improve-cbrt guess x) x)))
@@ -70,7 +70,7 @@
           ((= x 0) (* 2 y))
           ((= y 1) 2)
           (else (A (- x 1) (A x (- y 1))))))
-  
+
   (A 1 10)
   (A 0 (A 1 9))
   (A 0 (A 0 (A 1 8)))
@@ -79,20 +79,20 @@
   (A 0 (A 0 (A 0 (A 0 (A 0 (A 0 (A 0 (A 0 (A 0 2)))))))))
   ;...
   1024 ;; generalizing, (A 1 x) => 2^x.
-  
+
   (A 2 4)
   (A 1 (A 1 (A 1 (A 1 1))))
   (A 1 (A 1 (A 1 2)))
   (A 1 (A 1 4))
   (A 1 16)
   65536 ;; generalizing, (A 2 4) => 2^2^2^2, call it 2 ^^ 4.
-  
+
   (A 3 3)
   (A 2 (A 2 (A 2 1)))
   (A 2 (A 2 2))
   (A 2 4)
   65536 ;; generalizing, (A 3 3) => 2 ^^ 2 ^^ 2, call it 2 ^^^ 3
-  
+
   ; (f n) => 2*n or +_1^N 2
   ; (g n) => 2^n or *_1^N 2
   ; (h n) => 2 ^^ n or ^_1^N 2 (where ^^ n means "repeated exponent")
@@ -110,11 +110,11 @@
 
 (define (fit-iter fn-3 fn-2 fn-1 i)
   (if (<= i 0) (+ i fn-1) ; (fit 0) => 0, (fit 1) => 1 etc
-      (fit-iter fn-2 
-                fn-1 
+      (fit-iter fn-2
+                fn-1
                 (+ fn-1 (* 2 fn-2) (* 3 fn-3))
                 (dec i))))
-  
+
 ;(fit 3)
 ;(fit-iter 0 1 2 1)
 ;(fit-iter 1 2 4 0)
@@ -125,16 +125,16 @@
   (cond ((<= row 1) 1)
         ((<= ix 1) (pascal (dec row) ix))
         ((>= ix row) (pascal (dec row) (dec ix)))
-        (else (+ (pascal (dec row) ix) 
+        (else (+ (pascal (dec row) ix)
                  (pascal (dec row) (dec ix))))))
 
 
 ;; Exercise 1.13
-  
-;plug and chug algebra elided. Just plug the given values 
+
+;plug and chug algebra elided. Just plug the given values
 ;into the recurrence, one finds that they satisfy f(n) = f(n-1) + f(n-2)
-;with f(0) = 0 and f(1) = 1. One realizes that the fibonnacci sequence with 
-;other starting points amounts to different scaling constant plus different 
+;with f(0) = 0 and f(1) = 1. One realizes that the fibonnacci sequence with
+;other starting points amounts to different scaling constant plus different
 ;value of psi (while phi is fixed and psi < phi).
 
 ;; Exercise 1.14
@@ -155,10 +155,10 @@
         ((= kinds-of-coins 3) 10)
         ((= kinds-of-coins 4) 25)
         ((= kinds-of-coins 5) 50)))
- 
-;; On expanding this, one discovers that it is O(amount) in space (because 
-;; you can always count out pennies, and its depth is the number of 
-;; coins counted out in the worst case. For similar reasons, I think the 
+
+;; On expanding this, one discovers that it is O(amount) in space (because
+;; you can always count out pennies, and its depth is the number of
+;; coins counted out in the worst case. For similar reasons, I think the
 ;; time taken is O(N^2) (consider: count out all pennies; count out one
 ;; nickel and pennies; count out two nickels and pennies, etc.)
 
@@ -176,7 +176,7 @@
   (cond ((= n 0) a)
         ((even? n) (it-exp-iter (square b) (/ n 2) a))
         (else (it-exp-iter b (dec n) (* a b)))))
-       
+
 ;;Exercise 1.1.7
 
 (define (mult a b)
@@ -199,7 +199,7 @@
          (fib-iter a
                    b
                    (+ (square p) (square q)) ; compute p’
-                   (+ (* 2 p q) (square q)) ; compute q’ 
+                   (+ (* 2 p q) (square q)) ; compute q’
                    (/ count 2)))
         (else (fib-iter (+ (* b q) (* a q) (* a p))
                         (+ (* b p) (* a q))
@@ -228,10 +228,10 @@
   2
   )
 
-; I don't see why the order of operations should differ here between 
+; I don't see why the order of operations should differ here between
 ; normal and applicative order....
 ; unless normal order is unlazy, which doesn't fit the substitution model.
-; Which it seems is the point. I don't want to hand expand it. Okay, so by 
+; Which it seems is the point. I don't want to hand expand it. Okay, so by
 ; "normal order" they really do mean "macro style"
 
 ;; Exercise 1.21
@@ -251,7 +251,7 @@
   (smallest-divisor 19999));7
 
 ;; Exercise 1.22
-  
+
 (define (timed-prime-test n)
   (newline) (display n) (start-prime-test n (runtime)))
 ;(define (start-prime-test n start-time)
@@ -264,7 +264,7 @@
 (define (search-for-primes lower howmany)
   (define (iter lower howmany accum)
     (cond ((= 0 howmany) accum)
-          ((timed-prime-test lower) 
+          ((timed-prime-test lower)
            (iter (+ 2 lower) (dec howmany) (cons lower accum)))
           (else (iter (+ 2 lower) howmany accum))))
   (iter (if (odd? lower) lower (inc lower)) howmany '()))
@@ -278,8 +278,8 @@
   (cond ((> (square test-divisor) n) n)
         ((divides? test-divisor n) test-divisor)
         (else (find-divisor n (next test-divisor)))))
-;after modification, ~ 800 us per test, so prime testing 
-;could take up 1000 ms and been cut in half, with 300us other 
+;after modification, ~ 800 us per test, so prime testing
+;could take up 1000 ms and been cut in half, with 300us other
 ;overhead (output?)
 
 ;; exercise 1.24
@@ -315,7 +315,7 @@
 ;; Exercise 1.25
 
 ; Dealing with large integers takes at least O(log n) for all operations,
-; so when this calls (fast-expt base exp) it is creating a runtime of 
+; so when this calls (fast-expt base exp) it is creating a runtime of
 ; at least O(exp) rather than the O(log exp) of the modular exponentiation
 ; algorithm.
 
@@ -326,13 +326,13 @@
 
 ;; Exercise 1.27
 
-(define (carmichael-check n) 
+(define (carmichael-check n)
   (define (carmichael-iter a n)
     (if (= a n) #t
         (and (= a (expmod a n n))
              (carmichael-iter (inc a) n))))
   (carmichael-iter 2 n))
-               
+
 (define carmichael-numbers (list 561 1105 1729 2465 2821 6601))
 (define (ex-1-26) (map fermat-test carmichael-numbers))
 
@@ -340,27 +340,27 @@
 
 (define (expmod-mr base exp m)
   (cond ((= exp 0) 1)
-        ((even? exp) 
+        ((even? exp)
          (let* ((mm (expmod-mr base (/ exp 2) m))
-                (r (remainder (square mm) m)))                            
+                (r (remainder (square mm) m)))
            (if (and (= r 1) ;nontrivial means nontrivial mod m
-                    (> mm 1) 
-                    (< mm (dec m))) 
+                    (> mm 1)
+                    (< mm (dec m)))
                0 r)))
         (else (remainder (* base (expmod-mr base (- exp 1) m)) m))))
-    
+
 (define (mr-test n)
   (define (try-it a)
     (let ((em (expmod-mr a (dec n) n)))
       (if (= em 0) #f
           (= em 1))))
   (try-it (+ 1 (random (- n 1)))))
-  
+
 (define (mr-prime? n times)
    (cond ((= times 0) #t)
          ((mr-test n) (mr-prime? n (- times 1)))
          (else #f)))
-    
+
 (define (mr-demo)
   (define (check? n) (mr-prime? n 20))
   (display (map check? carmichael-numbers)) ;all false

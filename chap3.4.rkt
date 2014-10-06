@@ -308,9 +308,11 @@
 
 ;;; Exercise 3.49
 
-;; Imagine two database processes: One which corrects the primary
-;; address for every person, and another which corrects the primary
-;; resident for every address.
+;; Imagine two database processes: One which copies information from
+;; customer records to linked address records, and another which
+;; copies information from address records to linked customer records.
+;;
+;; Sooner or later they collide.
 ;;
 ;; Or something like that. A concrete example is slippery to pin down
 ;; here because it seems like a workaround can always be devised. The
